@@ -13,12 +13,16 @@
   - 소스 표시명: `늑대닷컴 Auto - ...`
 - `t.me/s/wfwf_com` 텔레그램 채널에서 `wfwf###.com` 도메인 번호를 읽어 자동 갱신
 - 기존 공식 `늑대닷컴` 확장과 별개로 설치 가능하도록 분리
+- 이미지 로딩 실패 대응
+  - `data-original` 우선, `src` fallback
+  - placeholder 이미지 제외
+  - 이미지 요청 시 챕터 URL referer 사용
 
 ## APK
 
 현재 빌드 결과물:
 
-- `src/ko/wolfdotcomauto/build/outputs/apk/release/tachiyomi-ko.wolfdotcomauto-v1.4.3-release.apk`
+- `src/ko/wolfdotcomauto/build/outputs/apk/release/tachiyomi-ko.wolfdotcomauto-v1.4.4-release.apk`
 
 ## 빌드
 

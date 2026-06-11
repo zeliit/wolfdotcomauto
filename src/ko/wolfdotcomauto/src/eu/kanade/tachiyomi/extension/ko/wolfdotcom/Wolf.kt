@@ -274,10 +274,27 @@ open class Wolf(
 
     override fun pageListParse(response: Response): List<Page> {
         val document = response.asJsoup()
+        val chapterUrl = response.request.url.toString()
 
-        return document.select(".image-view img").mapIndexed { idx, img ->
-            Page(idx, imageUrl = img.absUrl("data-original"))
-        }
+        return document.select(".image-view img")
+            .mapNotNull { img ->
+                img.absUrl("data-original")
+                    .ifBlank { img.absUrl("src") }
+                    .takeUnless { it.isBlank() || it.endsWith("/assets/img/sprite.png") }
+            }
+            .mapIndexed { idx, imageUrl ->
+                Page(idx, url = chapterUrl, imageUrl = imageUrl)
+            }
+    }
+
+    override fun imageRequest(page: Page): Request {
+        val imageHeaders = headersBuilder()
+            .set("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
+            .set("Referer", page.url.ifBlank { "$baseUrl/" })
+            .set("User-Agent", USER_AGENT)
+            .build()
+
+        return GET(page.imageUrl!!, imageHeaders)
     }
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
@@ -429,6 +446,8 @@ open class Wolf(
 
 private const val PREF_DOMAIN_NUM = "domain_number"
 private const val PREF_DOMAIN_NUM_DEFAULT = "domain_number_default"
+private const val USER_AGENT =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36"
 private const val PREF_TELEGRAM_LAST_CHECK_AT = "telegram_last_check_at"
 private const val TELEGRAM_CHANNEL_URL = "https://t.me/s/wfwf_com"
 private const val TELEGRAM_CHECK_INTERVAL_MS = 10 * 60 * 1000L
