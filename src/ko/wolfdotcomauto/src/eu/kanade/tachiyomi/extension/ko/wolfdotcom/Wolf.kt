@@ -345,9 +345,15 @@ open class Wolf(
         }
 
     private fun domainNumberInterceptor(chain: Interceptor.Chain): Response {
+        val request = chain.request()
+
+        if (!request.url.host.matches(wolfHostRegex)) {
+            return chain.proceed(request)
+        }
+
         refreshDomainNumberFromTelegram()
 
-        val initialRequest = rebuildRequestWithCurrentDomain(chain.request())
+        val initialRequest = rebuildRequestWithCurrentDomain(request)
         var response = chain.proceed(initialRequest)
 
         extractDomainNumberFromPopup(response)?.let { newDomainNum ->
@@ -427,6 +433,7 @@ open class Wolf(
     private fun extractDomainNumber(value: String): String? = domainUrlRegex.find(value)?.groupValues?.get(1)
 
     private val domainUrlRegex = Regex("""https?://wfwf(\d+)\.com""", RegexOption.IGNORE_CASE)
+    private val wolfHostRegex = Regex("""^wfwf\d+\.com$""", RegexOption.IGNORE_CASE)
 
     private fun refererInterceptor(chain: Interceptor.Chain): Response {
         val request = chain.request().newBuilder()
