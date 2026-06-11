@@ -1,53 +1,33 @@
-# Keiyoushi Extensions
+# wolfdotcomauto
 
-### Please give the repo a :star:
+`Mihon` / `Tachiyomi` 계열에서 사용하는 `늑대닷컴 Auto` 커스텀 확장 저장소입니다.
 
-| Build                                                                                                                                                                               | Need Help?                                                                                                                                              |
-|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [![CI](https://github.com/keiyoushi/extensions-source/actions/workflows/build_push.yml/badge.svg)](https://github.com/keiyoushi/extensions-source/actions/workflows/build_push.yml) | [![Discord](https://img.shields.io/discord/1193460528052453448.svg?label=discord&labelColor=7289da&color=2c2f33&style=flat)](https://discord.gg/3FbCpdKbdY) |
+이 저장소에서 관리하는 실제 변경 대상은 `src/ko/wolfdotcomauto` 모듈입니다.
 
-## Usage
-**If you are new to repository/extensions, please read the [Keiyoushi Getting Started guide](https://keiyoushi.github.io/docs/guides/getting-started#adding-the-extension-repo) first.**
+## 변경 내용
 
-* You can add our repo by visiting the [Keiyoushi Website](https://keiyoushi.github.io/add-repo)
-* Otherwise, copy & paste the following URL: https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json
+- 기존 `늑대닷컴`과 충돌하지 않도록 별도 패키지명 사용
+  - `eu.kanade.tachiyomi.extension.ko.wolfdotcomauto`
+- 별도 확장명 사용
+  - 앱 표시명: `Tachiyomi: Wolf.com Auto`
+  - 소스 표시명: `늑대닷컴 Auto - ...`
+- `t.me/s/wfwf_com` 텔레그램 채널에서 `wfwf###.com` 도메인 번호를 읽어 자동 갱신
+- 기존 공식 `늑대닷컴` 확장과 별개로 설치 가능하도록 분리
 
-## Requests
+## APK
 
-To request a new source or bug fix, [create an issue](https://github.com/keiyoushi/extensions-source/issues/new/choose).
+현재 빌드 결과물:
 
-Please note that creating an issue does not mean that the source will be added or fixed in a timely
-fashion, because the work is volunteer-based. Some sources may also be impossible to do or prohibitively
-difficult to maintain.
+- `src/ko/wolfdotcomauto/build/outputs/apk/release/tachiyomi-ko.wolfdotcomauto-v1.4.3-release.apk`
 
-If you would like to see a request fulfilled and have the necessary skills to do so, consider contributing!
-Issues are up-for-grabs for any developer if there is no assigned user already.
+## 빌드
 
-## Contributing
+```powershell
+.\gradlew.bat :src:ko:wolfdotcomauto:assembleRelease --no-daemon
+```
 
-Contributions are welcome!
+## 설치 주의
 
-Check out the repo's [issue backlog](https://github.com/keiyoushi/extensions-source/issues) for source requests and bug reports.
-
-## License
-
-    Copyright 2015 Javier Tomás
-
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
-
-## Disclaimer
-
-This project does not have any affiliation with the content providers available.
-
-This project is not affiliated with Mihon/Tachiyomi. Don't ask for help about these extensions at the
-official support means of Mihon/Tachiyomi. All credits to the codebase goes to the original contributors.
+- 이 APK는 공식 서명본이 아니라 커스텀 빌드입니다.
+- 설치 후 Mihon 쪽에서 확장 신뢰 처리가 필요할 수 있습니다.
+- 공식 `늑대닷컴`과는 별도 확장으로 동작합니다.
