@@ -6,9 +6,9 @@ import org.jsoup.nodes.Document
 
 class WolfFactory : SourceFactory {
     override fun createSources() = listOf(
-        Wolf("Auto Webtoon", "ing", "list", "view"),
-        Wolf("Auto Comic", "cm", "cl", "cv"),
-        object : Wolf("Auto Photo", "pt", "list", "view") {
+        Wolf("Webtoon", "ing", "list", "view"),
+        Wolf("Comic", "cm", "cl", "cv"),
+        object : Wolf("Photo", "pt", "list", "view") {
             override fun getFilterList(): FilterList = FilterList()
 
             override fun parseSearchFilters(document: Document) {
