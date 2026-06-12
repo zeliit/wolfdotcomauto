@@ -35,13 +35,24 @@ class Toonkor :
     override val baseUrl: String
         get() = "https://$currentDomain"
 
-    override val client = network.client.newBuilder()
+    // Komikku/Mihon provides cloudflareClient at runtime but it's missing from the stub library.
+    // Use reflection so we get Cloudflare TLS-bypass when available, plain client otherwise.
+    @Suppress("UNCHECKED_CAST")
+    private val baseHttpClient: okhttp3.OkHttpClient by lazy {
+        try {
+            network.javaClass.getMethod("getCloudflareClient").invoke(network) as okhttp3.OkHttpClient
+        } catch (_: Exception) {
+            network.client
+        }
+    }
+
+    override val client = baseHttpClient.newBuilder()
         .addInterceptor(::domainInterceptor)
         .addInterceptor(::browserHeadersInterceptor)
         .addNetworkInterceptor(::refererInterceptor)
         .build()
 
-    private val telegramClient = network.client
+    private val telegramClient: okhttp3.OkHttpClient by lazy { baseHttpClient }
 
     override val lang = "ko"
 
@@ -256,7 +267,7 @@ class Toonkor :
         private const val DEFAULT_DOMAIN = "tkor125.com"
         private const val TELEGRAM_CHANNEL_URL = "https://t.me/s/toonkor_com"
         private const val USER_AGENT =
-            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36"
+            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Mobile Safari/537.36"
         private const val PREF_DOMAIN = "domain"
         private const val PREF_LAST_CHECK = "telegram_last_check"
         private const val CHECK_INTERVAL_MS = 10 * 60 * 1000L

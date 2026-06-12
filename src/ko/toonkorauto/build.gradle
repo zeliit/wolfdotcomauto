@@ -1,7 +1,7 @@
 ext {
     extName = 'Toonkor Auto'
     extClass = '.Toonkor'
-    extVersionCode = 4
+    extVersionCode = 6
     isNsfw = true
 }
 
