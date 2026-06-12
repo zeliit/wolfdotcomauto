@@ -37,6 +37,7 @@ class Toonkor :
 
     override val client = network.client.newBuilder()
         .addInterceptor(::domainInterceptor)
+        .addInterceptor(::browserHeadersInterceptor)
         .addNetworkInterceptor(::refererInterceptor)
         .build()
 
@@ -218,6 +219,15 @@ class Toonkor :
             .build()
     }
 
+    private fun browserHeadersInterceptor(chain: Interceptor.Chain): Response {
+        val request = chain.request().newBuilder()
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+            .header("Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7")
+            .build()
+        return chain.proceed(request)
+    }
+
     private fun refererInterceptor(chain: Interceptor.Chain): Response {
         val request = chain.request().newBuilder()
             .header("Referer", "$baseUrl/")
@@ -243,8 +253,10 @@ class Toonkor :
     }
 
     companion object {
-        private const val DEFAULT_DOMAIN = "tkor126.com"
+        private const val DEFAULT_DOMAIN = "tkor125.com"
         private const val TELEGRAM_CHANNEL_URL = "https://t.me/s/toonkor_com"
+        private const val USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36"
         private const val PREF_DOMAIN = "domain"
         private const val PREF_LAST_CHECK = "telegram_last_check"
         private const val CHECK_INTERVAL_MS = 10 * 60 * 1000L
