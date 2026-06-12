@@ -1,8 +1,9 @@
-package eu.kanade.tachiyomi.extension.ko.toonkor
+package eu.kanade.tachiyomi.extension.ko.toonkorauto
 
 import android.content.SharedPreferences
 import android.util.Base64
-import eu.kanade.tachiyomi.AppInfo
+import androidx.preference.EditTextPreference
+import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.source.ConfigurableSource
 import eu.kanade.tachiyomi.source.model.Filter
@@ -16,8 +17,11 @@ import eu.kanade.tachiyomi.util.asJsoup
 import keiyoushi.utils.firstInstanceOrNull
 import keiyoushi.utils.getPreferencesLazy
 import keiyoushi.utils.tryParse
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
+import org.jsoup.Jsoup
 import java.nio.charset.Charset
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -26,13 +30,17 @@ class Toonkor :
     HttpSource(),
     ConfigurableSource {
 
-    override val name = "Toonkor"
+    override val name = "Toonkor Auto"
 
-    private val defaultBaseUrl = "https://tkor114.com"
+    override val baseUrl: String
+        get() = "https://$currentDomain"
 
-    private val baseUrlPref = "overrideBaseUrl_v${AppInfo.getVersionName()}"
+    override val client = network.client.newBuilder()
+        .addInterceptor(::domainInterceptor)
+        .addNetworkInterceptor(::refererInterceptor)
+        .build()
 
-    override val baseUrl by lazy { getPrefBaseUrl() }
+    private val telegramClient = network.client
 
     override val lang = "ko"
 
@@ -80,7 +88,6 @@ class Toonkor :
         val type = filterList.firstInstanceOrNull<TypeFilter>()
         val sort = filterList.firstInstanceOrNull<SortFilter>()
 
-        // Hentai doesn't have a "completed" sort, ignore it if it's selected (equivalent to returning popular)
         val requestPath = when {
             query.isNotBlank() -> "/bbs/search.php?sfl=wr_subject%7C%7Cwr_content&stx=$query"
             type?.isSelection("Hentai") == true && sort?.isSelection("Completed") == true -> type.toUriPart()
@@ -147,25 +154,92 @@ class Toonkor :
         SortFilter(),
     )
 
-    // Preferences
-
-    override fun setupPreferenceScreen(screen: androidx.preference.PreferenceScreen) {
-        val baseUrlPref = androidx.preference.EditTextPreference(screen.context).apply {
-            key = this@Toonkor.baseUrlPref
-            title = BASE_URL_PREF_TITLE
-            summary = BASE_URL_PREF_SUMMARY
-            setDefaultValue(defaultBaseUrl)
-            dialogTitle = BASE_URL_PREF_TITLE
-            dialogMessage = "Default: $defaultBaseUrl"
+    private val currentDomain: String
+        get() {
+            val saved = preferences.getString(PREF_DOMAIN, "")!!
+            if (saved.isNotEmpty()) return saved
+            return fetchDomainFromTelegram() ?: DEFAULT_DOMAIN
         }
 
-        screen.addPreference(baseUrlPref)
+    private fun fetchDomainFromTelegram(): String? = runCatching {
+        telegramClient.newCall(GET(TELEGRAM_CHANNEL_URL, headers)).execute().use { response ->
+            if (!response.isSuccessful) return@runCatching null
+            val document = Jsoup.parse(response.body.string(), TELEGRAM_CHANNEL_URL)
+            val candidates = document.select("a[href]").eachAttr("href") + listOf(document.text())
+            candidates.asSequence()
+                .mapNotNull { domainRegex.find(it)?.groupValues?.get(1) }
+                .firstOrNull()
+        }
+    }.getOrNull()
+
+    private fun refreshDomainFromTelegram(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        val lastChecked = preferences.getLong(PREF_LAST_CHECK, 0L)
+        if (!force && now - lastChecked < CHECK_INTERVAL_MS) return
+        preferences.edit().putLong(PREF_LAST_CHECK, now).apply()
+        val newDomain = fetchDomainFromTelegram() ?: return
+        if (newDomain != preferences.getString(PREF_DOMAIN, "")) {
+            preferences.edit().putString(PREF_DOMAIN, newDomain).apply()
+        }
     }
 
-    private fun getPrefBaseUrl(): String = preferences.getString(baseUrlPref, defaultBaseUrl)!!
+    private fun domainInterceptor(chain: Interceptor.Chain): Response {
+        val request = chain.request()
+        if (!request.url.host.matches(tkorHostRegex)) {
+            return chain.proceed(request)
+        }
+        refreshDomainFromTelegram()
+        val currentHost = baseUrl.toHttpUrl().host
+        val adjustedRequest = if (request.url.host != currentHost) {
+            request.newBuilder().url(request.url.newBuilder().host(currentHost).build()).build()
+        } else {
+            request
+        }
+        var response = chain.proceed(adjustedRequest)
+        if (!response.isSuccessful) {
+            refreshDomainFromTelegram(force = true)
+            val newHost = baseUrl.toHttpUrl().host
+            if (newHost != adjustedRequest.url.host) {
+                response.close()
+                response = chain.proceed(
+                    adjustedRequest.newBuilder()
+                        .url(adjustedRequest.url.newBuilder().host(newHost).build())
+                        .build(),
+                )
+            }
+        }
+        return response
+    }
+
+    private fun refererInterceptor(chain: Interceptor.Chain): Response {
+        val request = chain.request().newBuilder()
+            .header("Referer", "$baseUrl/")
+            .build()
+        return chain.proceed(request)
+    }
+
+    private val domainRegex = Regex("""https?://(tkor\d+\.com)""", RegexOption.IGNORE_CASE)
+    private val tkorHostRegex = Regex("""^tkor\d+\.com$""", RegexOption.IGNORE_CASE)
+
+    override fun setupPreferenceScreen(screen: PreferenceScreen) {
+        EditTextPreference(screen.context).apply {
+            key = PREF_DOMAIN
+            title = "도메인 직접 입력"
+            summary = "자동 감지가 안 될 때만 입력 (예: tkor125.com)"
+            setOnPreferenceChangeListener { _, newValue ->
+                val value = (newValue as String).trim()
+                    .removePrefix("https://").removePrefix("http://").trimEnd('/')
+                preferences.edit().putString(PREF_DOMAIN, value).apply()
+                true
+            }
+        }.also(screen::addPreference)
+    }
 
     companion object {
-        private const val BASE_URL_PREF_TITLE = "Override BaseUrl"
-        private const val BASE_URL_PREF_SUMMARY = "Override default domain with a different one"
+        private const val DEFAULT_DOMAIN = "tkor125.com"
+        private const val TELEGRAM_CHANNEL_URL = "https://t.me/s/toonkor_com"
+        private const val PREF_DOMAIN = "domain"
+        private const val PREF_LAST_CHECK = "telegram_last_check"
+        private const val CHECK_INTERVAL_MS = 10 * 60 * 1000L
     }
 }
