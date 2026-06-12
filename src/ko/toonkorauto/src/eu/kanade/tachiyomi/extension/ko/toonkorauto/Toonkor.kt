@@ -186,26 +186,36 @@ class Toonkor :
             return chain.proceed(request)
         }
         refreshDomainFromTelegram()
-        val currentHost = baseUrl.toHttpUrl().host
-        val adjustedRequest = if (request.url.host != currentHost) {
-            request.newBuilder().url(request.url.newBuilder().host(currentHost).build()).build()
-        } else {
-            request
+        val adjustedRequest = rebuildWithCurrentDomain(request)
+        return tryProceed(chain, adjustedRequest)
+    }
+
+    private fun tryProceed(chain: Interceptor.Chain, request: Request): Response {
+        val response = runCatching { chain.proceed(request) }.getOrElse {
+            refreshDomainFromTelegram(force = true)
+            val retryRequest = rebuildWithCurrentDomain(request)
+            if (retryRequest.url.host != request.url.host) {
+                return chain.proceed(retryRequest)
+            }
+            throw it
         }
-        var response = chain.proceed(adjustedRequest)
         if (!response.isSuccessful) {
             refreshDomainFromTelegram(force = true)
-            val newHost = baseUrl.toHttpUrl().host
-            if (newHost != adjustedRequest.url.host) {
+            val retryRequest = rebuildWithCurrentDomain(request)
+            if (retryRequest.url.host != request.url.host) {
                 response.close()
-                response = chain.proceed(
-                    adjustedRequest.newBuilder()
-                        .url(adjustedRequest.url.newBuilder().host(newHost).build())
-                        .build(),
-                )
+                return chain.proceed(retryRequest)
             }
         }
         return response
+    }
+
+    private fun rebuildWithCurrentDomain(request: Request): Request {
+        val currentHost = baseUrl.toHttpUrl().host
+        if (request.url.host == currentHost) return request
+        return request.newBuilder()
+            .url(request.url.newBuilder().host(currentHost).build())
+            .build()
     }
 
     private fun refererInterceptor(chain: Interceptor.Chain): Response {
@@ -233,7 +243,7 @@ class Toonkor :
     }
 
     companion object {
-        private const val DEFAULT_DOMAIN = "tkor125.com"
+        private const val DEFAULT_DOMAIN = "tkor126.com"
         private const val TELEGRAM_CHANNEL_URL = "https://t.me/s/toonkor_com"
         private const val PREF_DOMAIN = "domain"
         private const val PREF_LAST_CHECK = "telegram_last_check"
