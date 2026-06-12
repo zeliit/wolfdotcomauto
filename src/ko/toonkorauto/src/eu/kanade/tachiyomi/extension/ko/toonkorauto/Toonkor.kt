@@ -19,8 +19,12 @@ import keiyoushi.utils.getPreferencesLazy
 import keiyoushi.utils.tryParse
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Interceptor
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
+import org.json.JSONObject
 import org.jsoup.Jsoup
 import java.nio.charset.Charset
 import java.text.SimpleDateFormat
@@ -47,12 +51,16 @@ class Toonkor :
     }
 
     override val client = baseHttpClient.newBuilder()
+        .addInterceptor(::flareSolverrInterceptor)
         .addInterceptor(::domainInterceptor)
         .addInterceptor(::browserHeadersInterceptor)
         .addNetworkInterceptor(::refererInterceptor)
         .build()
 
     private val telegramClient: okhttp3.OkHttpClient by lazy { baseHttpClient }
+
+    private val flareSolverrUrl: String
+        get() = preferences.getString(PREF_FLARESOLVERR, "")!!.trim().trimEnd('/')
 
     override val lang = "ko"
 
@@ -246,10 +254,83 @@ class Toonkor :
         return chain.proceed(request)
     }
 
+    // Intercepts toonkor requests and routes them through FlareSolverr if configured.
+    private fun flareSolverrInterceptor(chain: Interceptor.Chain): Response {
+        val request = chain.request()
+        val solverrUrl = flareSolverrUrl
+        if (solverrUrl.isEmpty() || !request.url.host.matches(tkorHostRegex)) {
+            return chain.proceed(request)
+        }
+
+        val targetUrl = request.url.toString()
+        val body = JSONObject().apply {
+            put("cmd", "request.get")
+            put("url", targetUrl)
+            put("maxTimeout", 60000)
+        }.toString().toRequestBody("application/json".toMediaType())
+
+        val solverrRequest = Request.Builder()
+            .url("$solverrUrl/v1")
+            .post(body)
+            .header("Content-Type", "application/json")
+            .build()
+
+        val solverrResponse = runCatching {
+            baseHttpClient.newCall(solverrRequest).execute()
+        }.getOrElse { return chain.proceed(request) }
+
+        val json = runCatching {
+            JSONObject(solverrResponse.body.string()).also { solverrResponse.close() }
+        }.getOrElse { return chain.proceed(request) }
+
+        val solution = json.optJSONObject("solution") ?: return chain.proceed(request)
+        val html = solution.optString("response", "")
+        val userAgent = solution.optString("userAgent", USER_AGENT)
+
+        // Inject cookies from FlareSolverr into the cookie jar via a dummy response,
+        // then rebuild the original request with the solved User-Agent.
+        val cookies = solution.optJSONArray("cookies")
+        if (cookies != null) {
+            val cookieHeader = buildString {
+                for (i in 0 until cookies.length()) {
+                    val c = cookies.getJSONObject(i)
+                    if (isNotEmpty()) append("; ")
+                    append(c.getString("name")).append("=").append(c.getString("value"))
+                }
+            }
+            val rebuiltRequest = request.newBuilder()
+                .header("Cookie", cookieHeader)
+                .header("User-Agent", userAgent)
+                .build()
+            return chain.proceed(rebuiltRequest)
+        }
+
+        // If no cookies extracted just return synthetic response from the html body.
+        val responseBody = html.toByteArray().toResponseBody("text/html; charset=utf-8".toMediaType())
+        return okhttp3.Response.Builder()
+            .request(request)
+            .protocol(okhttp3.Protocol.HTTP_1_1)
+            .code(200)
+            .message("OK (FlareSolverr)")
+            .body(responseBody)
+            .build()
+    }
+
     private val domainRegex = Regex("""https?://(tkor\d+\.com)""", RegexOption.IGNORE_CASE)
     private val tkorHostRegex = Regex("""^tkor\d+\.com$""", RegexOption.IGNORE_CASE)
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
+        EditTextPreference(screen.context).apply {
+            key = PREF_FLARESOLVERR
+            title = "FlareSolverr 주소"
+            summary = "Cloudflare 우회용 FlareSolverr 서버 주소 (예: http://192.168.0.10:8191)"
+            dialogMessage = "FlareSolverr가 없으면 비워두세요."
+            setOnPreferenceChangeListener { _, newValue ->
+                preferences.edit().putString(PREF_FLARESOLVERR, (newValue as String).trim().trimEnd('/')).apply()
+                true
+            }
+        }.also(screen::addPreference)
+
         EditTextPreference(screen.context).apply {
             key = PREF_DOMAIN
             title = "도메인 직접 입력"
@@ -269,6 +350,7 @@ class Toonkor :
         private const val USER_AGENT =
             "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Mobile Safari/537.36"
         private const val PREF_DOMAIN = "domain"
+        private const val PREF_FLARESOLVERR = "flaresolverr_url"
         private const val PREF_LAST_CHECK = "telegram_last_check"
         private const val CHECK_INTERVAL_MS = 10 * 60 * 1000L
     }
