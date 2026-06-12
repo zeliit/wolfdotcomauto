@@ -155,11 +155,7 @@ class Toonkor :
     )
 
     private val currentDomain: String
-        get() {
-            val saved = preferences.getString(PREF_DOMAIN, "")!!
-            if (saved.isNotEmpty()) return saved
-            return fetchDomainFromTelegram() ?: DEFAULT_DOMAIN
-        }
+        get() = preferences.getString(PREF_DOMAIN, "")!!.ifEmpty { DEFAULT_DOMAIN }
 
     private fun fetchDomainFromTelegram(): String? = runCatching {
         telegramClient.newCall(GET(TELEGRAM_CHANNEL_URL, headers)).execute().use { response ->
@@ -175,7 +171,8 @@ class Toonkor :
     private fun refreshDomainFromTelegram(force: Boolean = false) {
         val now = System.currentTimeMillis()
         val lastChecked = preferences.getLong(PREF_LAST_CHECK, 0L)
-        if (!force && now - lastChecked < CHECK_INTERVAL_MS) return
+        val neverChecked = lastChecked == 0L
+        if (!force && !neverChecked && now - lastChecked < CHECK_INTERVAL_MS) return
         preferences.edit().putLong(PREF_LAST_CHECK, now).apply()
         val newDomain = fetchDomainFromTelegram() ?: return
         if (newDomain != preferences.getString(PREF_DOMAIN, "")) {
